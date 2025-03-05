@@ -1,0 +1,281 @@
+# "org" ensures this Service is used with the correct Serverless Framework License Key.
+org: ecvphdevs002
+# "service" is the name of this project. This will also be added to your AWS resource names.
+service: python-serverless-johnbons
+
+provider:
+  name: aws
+  runtime: python3.12
+  role: arn:aws:iam::874957933250:role/serverless-app-role
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - sqs:SendMessage
+        - sqs:GetQueueUrl
+        - sqs:GetQueueAttributes
+      Resource:
+        - Fn::GetAtt: [ProductsQueue, Arn]
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"import json
+import csv
+import urllib
+import time
+import boto3
+from decimal import Decimal
+
+from utils.decimal_encoder import DecimalEncoder
+from utils.generate_code import generate_code
+from services.dynamodb_service import get_dynamodb_table
+from services.sqs_service import send_message_to_queue
+from services.logging_service import log_product_creation
+
+TABLE_NAME = "products-johnbons2"
+
+def get_all_products(event, context):
+    table = get_dynamodb_table(TABLE_NAME)
+    items = table.scan().get('Items')
+    response_body = {"items": items, "status": "success"}
+    return {"statusCode": 200, "body": json.dumps(response_body, cls=DecimalEncoder)}
+
+def create_one_product(event, context):
+    body = json.loads(event["body"], parse_float=Decimal)
+    table = get_dynamodb_table(TABLE_NAME)
+    table.put_item(Item=body)
+
+    # Send message to SQS
+    send_message_to_queue('products-queue-johnbons-sqs', body)
+
+    # Log product creation to CloudWatch
+    log_product_creation(body.get("productId"))
+
+    return {"statusCode": 200, "body": json.dumps(body, cls=DecimalEncoder)}
+
+def get_one_product(event, context):
+    table = get_dynamodb_table(TABLE_NAME)
+    path_params = event.get("pathParameters")
+    if not path_params or "productId" not in path_params:
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"message": "Bad Request: productId is required"})
+        }
+    product_id = path_params["productId"]
+    response = table.get_item(Key={"productId": product_id})
+    if "Item" not in response:
+        return {
+            "statusCode": 404,
+            "body": json.dumps({"message": "Product not found"})
+        }
+    return {"statusCode": 200, "body": json.dumps(response["Item"], cls=DecimalEncoder)}
+
+def delete_one_product(event, context):
+    table = get_dynamodb_table(TABLE_NAME)
+    path_params = event.get("pathParameters")
+    if not path_params or "productId" not in path_params:
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"message": "Bad Request: productId is required"})
+        }
+    product_id = path_params["productId"]
+    table.delete_item(Key={"productId": product_id})
+    return {"statusCode": 200, "body": json.dumps({"message": f"Product {product_id} deleted successfully"})}
+
+def update_one_product(event, context):
+    table = get_dynamodb_table(TABLE_NAME)
+    path_params = event.get("pathParameters")
+    if not path_params or "productId" not in path_params:
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"message": "Bad Request: productId is required"})
+        }
+    product_id = path_params["productId"]
+
+    try:
+        body = json.loads(event["body"], parse_float=Decimal)
+    except (TypeError, json.JSONDecodeError):
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"message": "Invalid JSON body"})
+        }
+    if not body:
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"message": "Bad Request: No update data provided"})
+        }
+
+    # Build the update expression dynamically
+    update_expression = "SET " + ", ".join(f"#{k} = :{k}" for k in body.keys())
+    expression_attribute_names = {f"#{k}": k for k in body.keys()}
+    expression_attribute_values = {f":{k}": v for k, v in body.items()}
+
+    response = table.update_item(
+        Key={"productId": product_id},
+        UpdateExpression=update_expression,
+        ExpressionAttributeNames=expression_attribute_names,
+        ExpressionAttributeValues=expression_attribute_values,
+        ReturnValues="ALL_NEW"
+    )
+    return {
+        "statusCode": 200,
+        "body": json.dumps({
+            "message": "Product updated successfully",
+            "updatedAttributes": response.get("Attributes")
+        }, cls=DecimalEncoder)
+    }
+
+def batch_create_products(event, context):
+    bucket = event['Records'][0]['s3']['bucket']['name']
+    key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'])
+
+    # Process only files from the for_create/ folder
+    if not key.startswith("for_create/"):
+        return {"statusCode": 400, "body": json.dumps({"message": "Invalid file location"})}
+
+    local_filename = f'/tmp/{key.split("/")[-1]}'
+    s3_client = boto3.client('s3', region_name='us-east-2')
+    s3_client.download_file(bucket, key, local_filename)
+
+    table = get_dynamodb_table(TABLE_NAME)
+    with open(local_filename, 'r') as f:
+        csv_reader = csv.DictReader(f)
+        for row in csv_reader:
+            table.put_item(Item=row)
+
+    return {"statusCode": 200, "body": json.dumps({"message": "Products added successfully"})}
+
+def batch_delete_products(event, context):
+    bucket = event['Records'][0]['s3']['bucket']['name']
+    key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'])
+
+    # Process only files from the for_delete/ folder
+    if not key.startswith("for_delete/"):
+        return {"statusCode": 400, "body": json.dumps({"message": "Invalid file location"})}
+
+    local_filename = f'/tmp/{key.split("/")[-1]}'
+    s3_client = boto3.client('s3', region_name='us-east-2')
+    s3_client.download_file(bucket, key, local_filename)
+
+    table = get_dynamodb_table(TABLE_NAME)
+    with open(local_filename, 'r') as f:
+        csv_reader = csv.reader(f)
+        for row in csv_reader:
+            product_id = row[0]  # Assumes each row has one column: productId
+            table.delete_item(Key={"productId": product_id})
+
+    return {"statusCode": 200, "body": json.dumps({"message": "Products deleted successfully"})}
+
+def receive_message_from_sqs(event, context):
+    fieldnames = ["productId", "brand_name", "product_name", "price", "quantity"]
+    file_randomized_prefix = generate_code("pycon_", 8)
+    file_name = f'/tmp/product_created_{file_randomized_prefix}.csv'
+    bucket = "products-s3bucket-johnbons-sqs"
+    object_name = f'product_created_{file_randomized_prefix}.csv'
+
+    with open(file_name, 'w') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        for payload in event["Records"]:
+            json_payload = json.loads(payload["body"])
+            writer.writerow(json_payload)
+
+    s3_client = boto3.client('s3')
+    s3_client.upload_file(file_name, bucket, object_name)
+    return {"statusCode": 200, "body": json.dumps({"message": "SQS messages processed successfully"})}
+
+
+functions:
+
+  hello:
+    handler: handler.hello
+    events:
+      - httpApi:
+          path: /
+          method: get
+  
+  getAllProducts:
+    handler: handler.get_all_products
+    events:
+      - httpApi:
+          path: /products
+          method: get
+  
+  createOneProduct:
+    handler: handler.create_one_product
+    events:
+      - httpApi:
+          path: /products
+          method: post
+  
+  getOneProduct:
+    handler: handler.get_one_product
+    events:
+      - httpApi:
+          path: /products/{productId}
+          method: get
+  
+  deleteOneProduct:
+    handler: handler.delete_one_product
+    events:
+      - httpApi:
+          path: /products/{productId}
+          method: delete
+
+  updateOneProduct:
+    handler: handler.update_one_product
+    events:
+      - httpApi:
+          path: /products/{productId}
+          method: put
+          
+  batchCreateProducts:
+    handler: handler.batch_create_products
+    events:
+      - s3:
+          bucket: products-s3bucket-johnbons
+          event: s3:ObjectCreated:*
+          existing: true
+          rules:
+            - prefix: for_create/
+  batchDeleteProducts:
+    handler: handler.batch_delete_products
+    events:
+      - s3:
+          bucket: products-s3bucket-johnbons
+          event: s3:ObjectCreated:*
+          existing: true
+          rules:
+            - prefix: for_delete/
+
+  receiveMessagesFromSqs:
+    handler: handler.receive_message_from_sqs
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - ProductsQueue
+              - Arn
+          batchSize: 10
+      
+resources:
+  Resources:
+    ProductsDynamoDBTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: products-johnbons2
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: productId
+            AttributeType: S  
+        KeySchema:
+          - AttributeName: productId
+            KeyType: HASH  
+        Tags:
+          - Key: Environment
+            Value: Production
+    ProductsQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: products-queue-johnbons-sqs
+  

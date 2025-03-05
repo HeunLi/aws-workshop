@@ -1,0 +1,135 @@
+org: ecvphdevs002
+service: python-serverless-johnbons
+
+provider:
+  tracing:
+    apiGateway: true
+    lambda: true
+  iamRoleStatements:
+    - Effect: "Allow" # xray permissions (required)
+      Action:
+        - "xray:PutTraceSegments"
+        - "xray:PutTelemetryRecords"
+      Resource:
+        - "*"
+  name: aws
+  runtime: python3.12
+  role: arn:aws:iam::874957933250:role/serverless-app-role
+  region: us-east-2
+  environment:
+    DYNAMODB_TABLE: products-johnbons2
+
+plugins:
+  - serverless-offline
+  - serverless-prune-plugin
+  - serverless-python-requirements
+custom:
+  prune:
+    automatic: true
+    number: 3 
+
+functions:
+  hello:
+    handler: handlers.general_handler.hello
+    events:
+      - httpApi:
+          path: /
+          method: get
+
+  getAllProducts:
+    handler: handlers.product_handler.get_all_products
+    events:
+      - httpApi:
+          path: /products
+          method: get
+
+  createOneProduct:
+    handler: handlers.product_handler.create_one_product
+    events:
+      - httpApi:
+          path: /products
+          method: post
+
+  getOneProduct:
+    handler: handlers.product_handler.get_one_product
+    events:
+      - httpApi:
+          path: /products/{productId}
+          method: get
+
+  deleteOneProduct:
+    handler: handlers.product_handler.delete_one_product
+    events:
+      - httpApi:
+          path: /products/{productId}
+          method: delete
+
+  updateOneProduct:
+    handler: handlers.product_handler.update_one_product
+    events:
+      - httpApi:
+          path: /products/{productId}
+          method: put
+
+  batchCreateProducts:
+    handler: handlers.product_handler.batch_create_products
+    events:
+      - s3:
+          bucket: products-s3bucket-johnbons
+          event: s3:ObjectCreated:*
+          existing: true
+          rules:
+            - prefix: for_create/
+
+  batchDeleteProducts:
+    handler: handlers.product_handler.batch_delete_products
+    events:
+      - s3:
+          bucket: products-s3bucket-johnbons
+          event: s3:ObjectCreated:*
+          existing: true
+          rules:
+            - prefix: for_delete/
+
+  receiveMessagesFromSqs:
+    handler: handlers.product_handler.receive_message_from_sqs
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - ProductsQueue
+              - Arn
+          batchSize: 10
+
+resources:
+  Resources:
+    ProductsDynamoDBTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: products-johnbons2
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: productId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: productId
+            KeyType: HASH
+        Tags:
+          - Key: Environment
+            Value: Production
+    ProductsQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: products-queue-johnbons-sqs
+
+package:
+  include:
+    - handlers/**
+    - services/**
+    - utils/**
+  exclude:
+    - node_modules/**
+    - tests/**
+    - docs/**
+    - .git/**
+    - README.md
