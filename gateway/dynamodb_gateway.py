@@ -5,11 +5,9 @@ import urllib
 import time
 import os
 import boto3
-# import aws_xray_sdk.core as xray
 import botocore.exceptions
-# from aws_xray_sdk.core import patch_all
-# from aws_xray_sdk.core import xray_recorder
 from decimal import Decimal
+
 from utils.decimal_encoder import DecimalEncoder
 from utils.generate_code import generate_code
 from models.sqs_service import send_message_to_queue
@@ -19,9 +17,6 @@ TABLE_NAME = os.environ.get('DYNAMODB_TABLE')
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# patch_all()  # Automatically patches supported libraries like boto3
-
-# @xray_recorder.capture("get_all_products")
 def get_all_products(event, context):
     table_name = TABLE_NAME
     
@@ -54,7 +49,7 @@ def get_all_products(event, context):
     except Exception as e:
         return {"statusCode": 500, "body": json.dumps({"error": "Internal Server Error", "details": str(e)})}
 
-# @xray_recorder.capture("create_one_product")
+
 def create_one_product(event, context):
     body = json.loads(event["body"], parse_float=Decimal)
     
@@ -66,7 +61,7 @@ def create_one_product(event, context):
     
     response = {"statusCode": 200, "body": json.dumps(body, cls=DecimalEncoder)}
     
-    sqs = boto3.resource('sqs', region_name='us-east-2')
+    sqs = boto3.client('sqs', region_name='us-east-2')
     queue = sqs.get_queue_by_name(QueueName='products-queue-johnbons-sqs')
     response = queue.send_message(MessageBody=json.dumps(body, cls=DecimalEncoder))
 
@@ -98,8 +93,7 @@ def create_one_product(event, context):
     )
 
     return response
-    
-# @xray_recorder.capture("get_one_product")
+
 def get_one_product(event, context):
     table_name = TABLE_NAME
     dynamodb = boto3.resource("dynamodb", region_name="us-east-2")
@@ -132,8 +126,7 @@ def get_one_product(event, context):
         "statusCode": 200,
         "body": json.dumps(response["Item"], cls=DecimalEncoder)
     }
-    
-# @xray_recorder.capture("delete_one_product")
+
 def delete_one_product(event, context):
     table_name = TABLE_NAME
     dynamodb = boto3.resource("dynamodb", region_name="us-east-2")
@@ -159,8 +152,7 @@ def delete_one_product(event, context):
         "statusCode": 200,
         "body": json.dumps({"message": f"Product {product_id} deleted successfully"})
     }
-    
-# @xray_recorder.capture("update_one_product")
+
 def update_one_product(event, context):
     table_name = TABLE_NAME
     dynamodb = boto3.resource("dynamodb", region_name="us-east-2")
@@ -216,8 +208,7 @@ def update_one_product(event, context):
             "updatedAttributes": response.get("Attributes")
         }, cls=DecimalEncoder)
     }
-    
-# @xray_recorder.capture("batch_create_products")
+
 def batch_create_products(event, context):
     print("File uploaded trigger")
     print(event)
@@ -250,8 +241,7 @@ def batch_create_products(event, context):
     
     print("All products have been added successfully!")
     return {"statusCode": 200, "body": json.dumps({"message": "Products added successfully"})}
-    
-# @xray_recorder.capture("batch_delete_products")
+
 def batch_delete_products(event, context):
     print("File uploaded trigger for deletion")
     print(event)
@@ -287,8 +277,7 @@ def batch_delete_products(event, context):
 
     print("All products listed in the file have been deleted!")
     return {"statusCode": 200, "body": json.dumps({"message": "Products deleted successfully"})}
-    
-# @xray_recorder.capture("receive_message_from_sqs")
+
 def receive_message_from_sqs(event, context):
     fieldnames = ["productId", "brand_name", "product_name", "price", "quantity"]
     file_randomized_prefix = generate_code("pycon_", 8)
