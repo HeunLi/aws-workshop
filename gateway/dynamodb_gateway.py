@@ -61,8 +61,10 @@ def create_one_product(event, context):
     
     response = {"statusCode": 200, "body": json.dumps(body, cls=DecimalEncoder)}
     
-    sqs = boto3.client('sqs', region_name='us-east-2')
+    sqs = boto3.resource('sqs', region_name='us-east-2')
     queue = sqs.get_queue_by_name(QueueName='products-queue-johnbons-sqs')
+    
+    # Create a new message
     response = queue.send_message(MessageBody=json.dumps(body, cls=DecimalEncoder))
 
     # Log the event to CloudWatch

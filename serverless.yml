@@ -91,15 +91,15 @@ functions:
           rules:
             - prefix: for_delete/
 
-  receiveMessagesFromSqs:
-    handler: handlers.product_handler.receive_message_from_sqs
-    events:
-      - sqs:
-          arn:
-            Fn::GetAtt:
-              - ProductsQueue
-              - Arn
-          batchSize: 10
+  # receiveMessagesFromSqs:
+  #   handler: handlers.product_handler.receive_message_from_sqs
+  #   events:
+  #     - sqs:
+  #         arn:
+  #           Fn::GetAtt:
+  #             - ProductsQueue
+  #             - Arn
+  #         batchSize: 10
 
 resources:
   Resources:
