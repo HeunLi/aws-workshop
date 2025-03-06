@@ -12,9 +12,14 @@ provider:
         - "xray:PutTelemetryRecords"
       Resource:
         - "*"
+    - Effect: "Allow"
+      Action:
+        - "events:PutEvents"
+      Resource:
+        - "arn:aws:events:us-east-2:272898481162:event-bus/custom-johnbons-event-bus-2"
   name: aws
   runtime: python3.12
-  role: arn:aws:iam::874957933250:role/serverless-app-role
+  role: arn:aws:iam::272898481162:role/serverless-app-role
   region: us-east-2
   environment:
     DYNAMODB_TABLE: products-johnbons2
@@ -49,7 +54,22 @@ functions:
       - httpApi:
           path: /products
           method: post
+      - eventBridge:
+          eventBus: arn:aws:events:us-east-2:272898481162:event-bus/custom-johnbons-event-bus-2
+          pattern:
+            source:
+              - "product.service"
+            detail-type:
+              - "product_created"
 
+  addStocksToProduct:
+    handler: handlers.product_handler.add_stocks_to_product
+    events:
+      - http:
+          path: products/{productId}/inventory
+          method: post
+          cors: true
+          
   getOneProduct:
     handler: handlers.product_handler.get_one_product
     events:
@@ -75,7 +95,7 @@ functions:
     handler: handlers.product_handler.batch_create_products
     events:
       - s3:
-          bucket: products-s3bucket-johnbons
+          bucket: products-s3-johnbons4
           event: s3:ObjectCreated:*
           existing: true
           rules:
@@ -85,21 +105,11 @@ functions:
     handler: handlers.product_handler.batch_delete_products
     events:
       - s3:
-          bucket: products-s3bucket-johnbons
+          bucket: products-s3-johnbons4
           event: s3:ObjectCreated:*
           existing: true
           rules:
             - prefix: for_delete/
-
-  # receiveMessagesFromSqs:
-  #   handler: handlers.product_handler.receive_message_from_sqs
-  #   events:
-  #     - sqs:
-  #         arn:
-  #           Fn::GetAtt:
-  #             - ProductsQueue
-  #             - Arn
-  #         batchSize: 10
 
 resources:
   Resources:
@@ -117,10 +127,60 @@ resources:
         Tags:
           - Key: Environment
             Value: Production
-    ProductsQueue:
-      Type: AWS::SQS::Queue
+            
+    ProductsFetchedRule:
+      Type: AWS::Events::Rule
       Properties:
-        QueueName: products-queue-johnbons-sqs
+        EventBusName: custom-johnbons-event-bus-2  # Using the existing event bus
+        EventPattern:
+          source:
+            - "com.johnbons.products"
+          detail-type:
+            - "products_fetched"
+        State: ENABLED
+        Targets:
+          - Arn: !GetAtt LogProductsEventsFunction.Arn
+            Id: LogProductsEventsFunction
+            
+    LogProductsEventsFunction:
+      Type: AWS::Lambda::Function
+      Properties:
+        FunctionName: log-products-events-johnbons
+        Handler: index.log_products_events  # Change to this
+        Runtime: python3.12
+        Role: arn:aws:iam::272898481162:role/serverless-app-role
+        Code:
+          ZipFile: |
+            import json
+            import logging
+            def log_products_events(event, context):
+                print(f"Products Event Received: {json.dumps(event)}")
+                return {"statusCode": 200}
+                
+    EventBridgeToLambdaPermission:
+      Type: AWS::Lambda::Permission
+      Properties:
+        Action: lambda:InvokeFunction
+        FunctionName: !Ref LogProductsEventsFunction
+        Principal: events.amazonaws.com
+        SourceArn: !GetAtt ProductsFetchedRule.Arn
+    
+    # Add this new ProductInventory table
+    ProductInventoryTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ProductInventory-chall-johnbons2
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: productId
+            AttributeType: S
+          - AttributeName: datetime
+            AttributeType: S
+        KeySchema:
+          - AttributeName: productId
+            KeyType: HASH
+          - AttributeName: datetime
+            KeyType: RANGE
 
 package:
   include:

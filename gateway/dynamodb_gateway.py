@@ -7,13 +7,14 @@ import os
 import boto3
 import botocore.exceptions
 from decimal import Decimal
-
+from models.eventbridge_event import EventbridgeEvent
 from utils.decimal_encoder import DecimalEncoder
 from utils.generate_code import generate_code
 from models.sqs_service import send_message_to_queue
 from models.logging_service import log_product_creation
 
 TABLE_NAME = os.environ.get('DYNAMODB_TABLE')
+INVENTORY_TABLE_NAME = "ProductInventory-chall-johnbons2"  # Define the inventory table name
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -37,6 +38,31 @@ def get_all_products(event, context):
         items.extend(response.get("Items", []))
 
         return_body = {"items": items, "status": "success"}
+
+        # Send event to EventBridge
+        event_payload = {"total_products": len(items), "timestamp": time.time()}
+        event = EventbridgeEvent("products_fetched", event_payload)
+        event.send()
+
+        # Log the event to CloudWatch
+        log_client = boto3.client("logs", region_name="us-east-2")
+        log_group_name = "/aws/lambda/python-serverless-johnbons-dev-getAllProducts"
+        log_stream_name = time.strftime("%Y/%m/%d")
+
+        # Ensure log group exists
+        try:
+            log_client.create_log_group(logGroupName=log_group_name)
+        except log_client.exceptions.ResourceAlreadyExistsException:
+            pass
+
+        # Ensure log stream exists
+        try:
+            log_client.create_log_stream(logGroupName=log_group_name, logStreamName=log_stream_name)
+        except log_client.exceptions.ResourceAlreadyExistsException:
+            pass
+
+        # Log the product retrieval
+        logger.info(f"Retrieved {len(items)} products")
 
         return {"statusCode": 200, "body": json.dumps(return_body, cls=DecimalEncoder)}
 
@@ -100,6 +126,7 @@ def get_one_product(event, context):
     table_name = TABLE_NAME
     dynamodb = boto3.resource("dynamodb", region_name="us-east-2")
     table = dynamodb.Table(table_name)
+    inventory_table = dynamodb.Table(INVENTORY_TABLE_NAME)
 
     # Debugging print to check the event received
     print("Received event:", json.dumps(event, indent=2))
@@ -114,7 +141,7 @@ def get_one_product(event, context):
 
     product_id = path_params["productId"]
 
-    # Corrected Key to match DynamoDB schema
+    # Get the product details
     response = table.get_item(Key={"productId": product_id})
 
     # Check if the product exists
@@ -123,10 +150,102 @@ def get_one_product(event, context):
             "statusCode": 404,
             "body": json.dumps({"message": "Product not found"})
         }
+    
+    product = response["Item"]
+    
+    # Get inventory transactions for this product
+    try:
+        inventory_response = inventory_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key('productId').eq(product_id)
+        )
+        
+        inventory_items = inventory_response.get('Items', [])
+        
+        # Calculate total stock by summing all quantity values
+        total_stock = sum(Decimal(item.get('quantity', 0)) for item in inventory_items)
+        
+        # Add inventory information to product
+        product['current_stock'] = total_stock
+        product['inventory_history'] = inventory_items
+        
+    except Exception as e:
+        # If there's an error with inventory, still return the product but with a note
+        product['current_stock'] = "Error fetching inventory"
+        product['inventory_error'] = str(e)
 
     return {
         "statusCode": 200,
-        "body": json.dumps(response["Item"], cls=DecimalEncoder)
+        "body": json.dumps(product, cls=DecimalEncoder)
+    }
+
+def add_stocks_to_product(event, context):
+    """
+    Add inventory transaction for a product
+    """
+    dynamodb = boto3.resource("dynamodb", region_name="us-east-2")
+    product_table = dynamodb.Table(TABLE_NAME)
+    inventory_table = dynamodb.Table(INVENTORY_TABLE_NAME)
+    
+    # Extract the productId from the API Gateway event
+    path_params = event.get("pathParameters")
+    if not path_params or "productId" not in path_params:
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"message": "Bad Request: productId is required"})
+        }
+
+    product_id = path_params["productId"]
+    
+    # Verify product exists
+    product_response = product_table.get_item(Key={"productId": product_id})
+    if "Item" not in product_response:
+        return {
+            "statusCode": 404,
+            "body": json.dumps({"message": "Product not found"})
+        }
+    
+    # Parse the inventory data from request body
+    try:
+        body = json.loads(event["body"], parse_float=Decimal)
+    except (TypeError, json.JSONDecodeError):
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"message": "Invalid JSON body"})
+        }
+    
+    # Validate required fields
+    if "quantity" not in body:
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"message": "Quantity is required"})
+        }
+    
+    # Ensure quantity is a number
+    try:
+        quantity = Decimal(str(body["quantity"]))
+    except:
+        return {
+            "statusCode": 400, 
+            "body": json.dumps({"message": "Quantity must be a number"})
+        }
+    
+    # Create inventory item
+    inventory_item = {
+        "productId": product_id,
+        "datetime": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "quantity": quantity,
+        "remarks": body.get("remarks", "")
+    }
+    
+    # Add to inventory table
+    inventory_table.put_item(Item=inventory_item)
+    
+    return {
+        "statusCode": 200,
+        "body": json.dumps({
+            "message": f"Inventory updated for product {product_id}",
+            "transaction": inventory_item
+        }, cls=DecimalEncoder)
     }
 
 def delete_one_product(event, context):
