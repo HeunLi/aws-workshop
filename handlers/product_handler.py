@@ -5,10 +5,10 @@ from gateway.dynamodb_gateway import (
     get_one_product,
     delete_one_product,
     update_one_product,
-    batch_create_products,
+    add_stocks_to_product,
+    batch_create_products, 
     batch_delete_products,
-    receive_message_from_sqs,
-    add_stocks_to_product,  # Add this new import
+    receive_message_from_sqs
 )
 
 def handler(event, context):
@@ -37,7 +37,6 @@ def handler(event, context):
         else:
             return method_not_allowed()
             
-    # Add this new route for inventory management
     elif resource == "/products/{productId}/inventory":
         if http_method == "POST":
             return add_stocks_to_product(event, context)
@@ -46,6 +45,6 @@ def handler(event, context):
             
     else:
         return {"statusCode": 404, "body": json.dumps({"message": "Not Found"})}
-
+        
 def method_not_allowed():
     return {"statusCode": 405, "body": json.dumps({"message": "Method Not Allowed"})}
