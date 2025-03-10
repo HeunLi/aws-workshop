@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flask + Tailwind</title>
+    <!-- TailwindCSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Link to Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center h-screen p-8">
+    <div class="text-center bg-white p-8 rounded-lg shadow-lg w-full max-w-2xl">
+        <h1 class="text-3xl font-bold text-blue-600">Hello, Flask with Tailwind CSS!</h1>
+        <p class="text-gray-600 mt-4">You're successfully using TailwindCSS with Flask!</p>
+        
+        <!-- Button -->
+        <button id="fetchDataBtn" class="button mt-4">Fetch Products</button>
+        <button onclick="window.location.href='/database'" class="button mt-4">
+            Go to New Page
+        </button>
+
+        <!-- Table to Display Data -->
+        <table id="productTable" class="mt-4 w-full border-collapse hidden">
+            <thead>
+                <tr class="bg-gray-200">
+                    <th class="border px-4 py-2">ID</th>
+                    <th class="border px-4 py-2">Name</th>
+                    <th class="border px-4 py-2">Price</th>
+                </tr>
+            </thead>
+            <tbody id="productTableBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        document.getElementById("fetchDataBtn").addEventListener("click", async function() {
+            try {
+                const response = await fetch("https://611vkfrpca.execute-api.us-east-2.amazonaws.com/dev/products");
+                const data = await response.json();
+        
+                console.log("API Response:", data); // Debugging step
+        
+                // Ensure "items" key exists and is an array
+                if (!data.items || !Array.isArray(data.items)) {
+                    console.error("Error: API response does not contain a valid 'items' array", data);
+                    return;
+                }
+        
+                const products = data.items; // Extract products array
+                const table = document.getElementById("productTable");
+                const tableBody = document.getElementById("productTableBody");
+                tableBody.innerHTML = ""; // Clear previous data
+        
+                products.forEach(product => {
+                    let cleanedProduct = {};
+                    Object.keys(product).forEach(key => {
+                        let trimmedKey = key.trim(); // Remove spaces
+                        cleanedProduct[trimmedKey] = product[key];
+                    });
+                
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                        <td class="border px-4 py-2">${cleanedProduct.productId || "N/A"}</td>
+                        <td class="border px-4 py-2">${cleanedProduct.product_name || cleanedProduct.name || "N/A"}</td>
+                        <td class="border px-4 py-2">$${cleanedProduct.price || "N/A"}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+        
+                table.classList.remove("hidden"); // Show table
+            } catch (error) {
+                console.error("Error fetching products:", error);
+            }
+        });
+    </script>
+</body>
+</html>

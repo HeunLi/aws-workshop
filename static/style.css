@@ -1,0 +1,14 @@
+.button {
+    background-color: #2563eb; /* Tailwind Blue-600 */
+    color: white;
+    padding: 10px 20px;
+    font-size: 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.button:hover {
+    background-color: #1e40af; /* Darker blue */
+}

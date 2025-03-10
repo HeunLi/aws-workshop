@@ -131,15 +131,14 @@ class ProductService:
         }
     
     def add_stocks_to_product(self, event, context):
-        """Add inventory transaction for a product"""
-        # Extract the productId from the API Gateway event
+        """Add inventory transaction and update product quantity"""
         path_params = event.get("pathParameters")
         if not path_params or "productId" not in path_params:
             return {
                 "statusCode": 400,
                 "body": json.dumps({"message": "Bad Request: productId is required"})
             }
-
+    
         product_id = path_params["productId"]
         
         # Verify product exists
@@ -150,7 +149,9 @@ class ProductService:
                 "body": json.dumps({"message": "Product not found"})
             }
         
-        # Parse the inventory data from request body
+        product = product_response["Item"]
+        
+        # Parse request body
         try:
             body = json.loads(event["body"], parse_float=Decimal)
         except (TypeError, json.JSONDecodeError):
@@ -158,42 +159,59 @@ class ProductService:
                 "statusCode": 400,
                 "body": json.dumps({"message": "Invalid JSON body"})
             }
-        
-        # Validate required fields
+    
+        # Validate quantity
         if "quantity" not in body:
             return {
                 "statusCode": 400,
                 "body": json.dumps({"message": "Quantity is required"})
             }
-        
-        # Ensure quantity is a number
+    
         try:
-            quantity = Decimal(str(body["quantity"]))
+            quantity_change = Decimal(str(body["quantity"]))  # Can be negative or positive
         except:
             return {
-                "statusCode": 400, 
+                "statusCode": 400,
                 "body": json.dumps({"message": "Quantity must be a number"})
             }
-        
-        # Create inventory item
+    
+        # Get the current quantity (default to 0 if missing)
+        current_quantity = Decimal(product.get("quantity", 0))
+    
+        # Ensure it doesn't go below 0
+        new_quantity = current_quantity + quantity_change
+        if new_quantity < 0:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"message": "Cannot reduce quantity below 0"})
+            }
+    
+        # Update product's quantity in product_table
+        self.product_table.update_item(
+            Key={"productId": product_id},
+            UpdateExpression="SET quantity = :q",
+            ExpressionAttributeValues={":q": new_quantity}
+        )
+    
+        # Log inventory transaction
         inventory_item = {
             "productId": product_id,
             "datetime": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "quantity": quantity,
+            "quantity": quantity_change,
             "remarks": body.get("remarks", "")
         }
-        
-        # Add to inventory table
         self.inventory_table.put_item(Item=inventory_item)
-        
+    
         return {
             "statusCode": 200,
             "body": json.dumps({
                 "message": f"Inventory updated for product {product_id}",
+                "new_quantity": new_quantity,
                 "transaction": inventory_item
             }, cls=DecimalEncoder)
         }
     
+        
     def delete_one_product(self, event, context):
         """Delete a single product by ID"""
         # Extract the productId from the API Gateway event
