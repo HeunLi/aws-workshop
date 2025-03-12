@@ -28,6 +28,7 @@ plugins:
   - serverless-offline
   - serverless-prune-plugin
   - serverless-python-requirements
+
 custom:
   prune:
     automatic: true
@@ -61,6 +62,13 @@ functions:
               - "product.service"
             detail-type:
               - "product_created"
+    
+  getLowestQuantity:
+    handler: handlers.product_handler.get_lowest_quantity
+    events:
+      - httpApi:
+          path: /products/lowest_quantity
+          method: get
 
   addStocksToProduct:
     handler: handlers.product_handler.add_stocks_to_product
@@ -111,6 +119,14 @@ functions:
           rules:
             - prefix: for_delete/
 
+  # New function for searching a product by product_name
+  getOneProductByName:
+    handler: handlers.product_handler.get_one_product_by_name
+    events:
+      - httpApi:
+          path: /products/by-name
+          method: get
+
 resources:
   Resources:
     ProductsDynamoDBTable:
@@ -121,9 +137,18 @@ resources:
         AttributeDefinitions:
           - AttributeName: productId
             AttributeType: S
+          - AttributeName: product_name
+            AttributeType: S
         KeySchema:
           - AttributeName: productId
             KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: product_name-index
+            KeySchema:
+              - AttributeName: product_name
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
         Tags:
           - Key: Environment
             Value: Production
@@ -146,7 +171,7 @@ resources:
       Type: AWS::Lambda::Function
       Properties:
         FunctionName: log-products-events-johnbons
-        Handler: index.log_products_events  # Change to this
+        Handler: index.log_products_events
         Runtime: python3.12
         Role: arn:aws:iam::272898481162:role/serverless-app-role
         Code:

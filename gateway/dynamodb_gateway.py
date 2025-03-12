@@ -7,6 +7,8 @@ import os
 import boto3
 import botocore.exceptions
 from decimal import Decimal
+from boto3.dynamodb.conditions import Key
+from decimal import Decimal
 from models.eventbridge_event import EventbridgeEvent
 from utils.decimal_encoder import DecimalEncoder
 from utils.generate_code import generate_code
@@ -51,7 +53,13 @@ class ProductService:
             # Log the product retrieval
             self._log_product_retrieval(len(items))
 
-            return {"statusCode": 200, "body": json.dumps(return_body, cls=DecimalEncoder)}
+            return {
+                "statusCode": 200,
+                "headers": {
+                    "Content-Type": "application/json"  # Ensure correct content type
+                },
+                "body": json.dumps(return_body, cls=DecimalEncoder)
+            }
 
         except botocore.exceptions.BotoCoreError as e:
             return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
@@ -127,86 +135,199 @@ class ProductService:
 
         return {
             "statusCode": 200,
+            "headers": {
+                "Content-Type": "application/json"  # Ensure the correct content type
+            },
+            "body": json.dumps(product, cls=DecimalEncoder)
+        }
+        
+    def get_one_product_by_name(self, event, context):
+        """
+        Retrieve a single product by product_name using a GSI.
+        Expects a query parameter 'product_name' in the event.
+        """
+        logger.info("Received event: %s", json.dumps(event))
+        
+        query_params = event.get("queryStringParameters") or {}
+        logger.info("Query parameters: %s", json.dumps(query_params))
+        
+        if "product_name" not in query_params:
+            logger.error("Bad Request: product_name is not provided in query parameters")
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"message": "Bad Request: product_name is required"})
+            }
+        
+        product_name = query_params["product_name"]
+        logger.info("Searching for product with product_name: %s", product_name)
+        
+        # Query the table using the GSI on product_name
+        try:
+            response = self.product_table.query(
+                IndexName="product_name-index",
+                KeyConditionExpression=Key("product_name").eq(product_name)
+            )
+            logger.info("DynamoDB query response: %s", json.dumps(response, default=str))
+        except Exception as e:
+            logger.exception("Error querying product_table with product_name %s: %s", product_name, e)
+            return {
+                "statusCode": 500,
+                "body": json.dumps({"message": "Internal Server Error", "error": str(e)})
+            }
+        
+        items = response.get("Items", [])
+        logger.info("Query returned %d items", len(items))
+        
+        if not items:
+            logger.warning("No product found with product_name: %s", product_name)
+            return {
+                "statusCode": 404,
+                "body": json.dumps({"message": "Product not found"})
+            }
+        
+        # Assuming product_name is unique, take the first item
+        product = items[0]
+        logger.info("Found product: %s", json.dumps(product, default=str))
+        
+        # Retrieve and attach inventory details using the product's productId
+        try:
+            inventory_response = self.inventory_table.query(
+                KeyConditionExpression=Key('productId').eq(product.get("productId"))
+            )
+            logger.info("Inventory query response: %s", json.dumps(inventory_response, default=str))
+            inventory_items = inventory_response.get('Items', [])
+            total_stock = sum(Decimal(item.get('quantity', 0)) for item in inventory_items)
+            product['current_stock'] = total_stock
+            product['inventory_history'] = inventory_items
+        except Exception as e:
+            logger.exception("Error fetching inventory for productId %s: %s", product.get("productId"), e)
+            product['current_stock'] = "Error fetching inventory"
+            product['inventory_error'] = str(e)
+        
+        logger.info("Returning product with inventory info: %s", json.dumps(product, default=str))
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
             "body": json.dumps(product, cls=DecimalEncoder)
         }
     
     def add_stocks_to_product(self, event, context):
         """Add inventory transaction and update product quantity"""
+    
+        # Extract productId from path parameters
         path_params = event.get("pathParameters")
         if not path_params or "productId" not in path_params:
+            logger.error("productId is required in pathParameters")
             return {
                 "statusCode": 400,
                 "body": json.dumps({"message": "Bad Request: productId is required"})
             }
     
         product_id = path_params["productId"]
+        logger.info("Updating inventory for productId: %s", product_id)
         
         # Verify product exists
         product_response = self.product_table.get_item(Key={"productId": product_id})
         if "Item" not in product_response:
+            logger.warning("Product %s not found", product_id)
             return {
                 "statusCode": 404,
                 "body": json.dumps({"message": "Product not found"})
             }
         
         product = product_response["Item"]
-        
-        # Parse request body
-        try:
-            body = json.loads(event["body"], parse_float=Decimal)
-        except (TypeError, json.JSONDecodeError):
+    
+        # Determine input parameters
+        # Prioritize queryStringParameters if quantity is provided there, otherwise try JSON body
+        input_data = {}
+        if event.get("queryStringParameters") and event["queryStringParameters"].get("quantity") is not None:
+            input_data = event["queryStringParameters"]
+            logger.info("Using input from query parameters: %s", json.dumps(input_data))
+        elif event.get("body"):
+            try:
+                input_data = json.loads(event["body"], parse_float=Decimal)
+                logger.info("Using input from JSON body: %s", json.dumps(input_data, default=str))
+            except (TypeError, json.JSONDecodeError) as e:
+                logger.exception("Error parsing JSON body: %s", e)
+                return {
+                    "statusCode": 400,
+                    "body": json.dumps({"message": "Invalid JSON body"})
+                }
+        else:
+            logger.error("No input provided. Neither query parameters nor body found.")
             return {
                 "statusCode": 400,
-                "body": json.dumps({"message": "Invalid JSON body"})
+                "body": json.dumps({"message": "Bad Request: Input is required via query parameters or JSON body"})
             }
     
         # Validate quantity
-        if "quantity" not in body:
+        if "quantity" not in input_data:
+            logger.error("Quantity parameter is missing from the input")
             return {
                 "statusCode": 400,
                 "body": json.dumps({"message": "Quantity is required"})
             }
-    
+        
         try:
-            quantity_change = Decimal(str(body["quantity"]))  # Can be negative or positive
-        except:
+            quantity_change = Decimal(str(input_data["quantity"]))  # Convert string (or number) to Decimal
+            logger.info("Quantity change: %s", str(quantity_change))
+        except Exception as e:
+            logger.exception("Quantity conversion error: %s", e)
             return {
                 "statusCode": 400,
                 "body": json.dumps({"message": "Quantity must be a number"})
             }
-    
+        
         # Get the current quantity (default to 0 if missing)
         current_quantity = Decimal(product.get("quantity", 0))
-    
-        # Ensure it doesn't go below 0
         new_quantity = current_quantity + quantity_change
+        logger.info("Current quantity: %s, New quantity: %s", str(current_quantity), str(new_quantity))
+        
+        # Ensure it doesn't go below 0
         if new_quantity < 0:
+            logger.error("New quantity cannot be negative")
             return {
                 "statusCode": 400,
                 "body": json.dumps({"message": "Cannot reduce quantity below 0"})
             }
-    
+        
         # Update product's quantity in product_table
-        self.product_table.update_item(
-            Key={"productId": product_id},
-            UpdateExpression="SET quantity = :q",
-            ExpressionAttributeValues={":q": new_quantity}
-        )
-    
+        try:
+            self.product_table.update_item(
+                Key={"productId": product_id},
+                UpdateExpression="SET quantity = :q",
+                ExpressionAttributeValues={":q": new_quantity}
+            )
+            logger.info("Updated product quantity to %s for productId %s", str(new_quantity), product_id)
+        except Exception as e:
+            logger.exception("Error updating product quantity: %s", e)
+            return {
+                "statusCode": 500,
+                "body": json.dumps({"message": "Error updating product quantity", "error": str(e)})
+            }
+        
         # Log inventory transaction
         inventory_item = {
             "productId": product_id,
             "datetime": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "quantity": quantity_change,
-            "remarks": body.get("remarks", "")
+            "remarks": input_data.get("remarks", "")
         }
-        self.inventory_table.put_item(Item=inventory_item)
-    
+        try:
+            self.inventory_table.put_item(Item=inventory_item)
+            logger.info("Logged inventory transaction: %s", json.dumps(inventory_item, default=str))
+        except Exception as e:
+            logger.exception("Error logging inventory transaction: %s", e)
+            return {
+                "statusCode": 500,
+                "body": json.dumps({"message": "Error logging inventory transaction", "error": str(e)})
+            }
+        
         return {
             "statusCode": 200,
             "body": json.dumps({
                 "message": f"Inventory updated for product {product_id}",
-                "new_quantity": new_quantity,
+                "new_quantity": str(new_quantity),
                 "transaction": inventory_item
             }, cls=DecimalEncoder)
         }
@@ -446,6 +567,51 @@ class ProductService:
         except self.log_client.exceptions.ResourceAlreadyExistsException:
             pass
 
+    def get_lowest_quantity(self, event, context):
+        """Retrieve the product with the lowest quantity along with its product ID and product name."""
+        try:
+            # Scan the table and project only the required fields
+            response = self.product_table.scan(
+                ProjectionExpression="productId, product_name, quantity"
+            )
+            items = response.get("Items", [])
+            
+            # Handle pagination if data is more than 1MB
+            while 'LastEvaluatedKey' in response:
+                response = self.product_table.scan(
+                    ProjectionExpression="productId, product_name, quantity",
+                    ExclusiveStartKey=response["LastEvaluatedKey"]
+                )
+                items.extend(response.get("Items", []))
+            
+            # Build the product response
+            if not items:
+                product = {"lowest_quantity": None, "product_id": None, "product_name": None}
+            else:
+                # Determine the item with the lowest quantity.
+                # If a product is missing a quantity, it defaults to 0.
+                lowest_item = min(items, key=lambda x: Decimal(x.get("quantity", 0)))
+                product = {
+                    "lowest_quantity": lowest_item.get("quantity", 0),
+                    "product_id": lowest_item.get("productId"),
+                    "product_name": lowest_item.get("product_name")
+                }
+            
+            return {
+                "statusCode": 200,
+                "headers": {
+                    "Content-Type": "application/json"  # Ensure the correct content type
+                },
+                "body": json.dumps(product, cls=DecimalEncoder)
+            }
+        except Exception as e:
+            return {
+                "statusCode": 500,
+                "headers": {
+                    "Content-Type": "application/json"
+                },
+                "body": json.dumps({"error": str(e)})
+            }
 
 # Lambda handler functions that use the ProductService class
 product_service = ProductService()
@@ -476,3 +642,9 @@ def batch_delete_products(event, context):
 
 def receive_message_from_sqs(event, context):
     return product_service.receive_message_from_sqs(event, context)
+    
+def get_lowest_quantity(event, context):
+    return product_service.get_lowest_quantity(event, context)
+    
+def get_one_product_by_name(event, context):
+    return product_service.get_one_product_by_name(event, context)

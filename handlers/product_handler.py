@@ -8,16 +8,14 @@ from gateway.dynamodb_gateway import (
     add_stocks_to_product,
     batch_create_products, 
     batch_delete_products,
-    receive_message_from_sqs
+    receive_message_from_sqs,
+    get_lowest_quantity,
+    get_one_product_by_name  # Newly added import
 )
 
 def handler(event, context):
-    """
-    This handler routes requests to the appropriate function in dynamodb_gateway.
-    It assumes that API Gateway is set up with resource paths and HTTP methods.
-    """
     http_method = event.get("httpMethod")
-    resource = event.get("resource")  # e.g., "/products" or "/products/{productId}"
+    resource = event.get("resource")  # e.g., "/products", "/products/{productId}", etc.
     
     if resource == "/products":
         if http_method == "GET":
@@ -40,6 +38,20 @@ def handler(event, context):
     elif resource == "/products/{productId}/inventory":
         if http_method == "POST":
             return add_stocks_to_product(event, context)
+        else:
+            return method_not_allowed()
+
+    # New endpoint for searching product by product_name
+    elif resource == "/products/by-name":
+        if http_method == "GET":
+            return get_one_product_by_name(event, context)
+        else:
+            return method_not_allowed()
+
+    # New endpoint for retrieving the lowest quantity among products
+    elif resource == "/products/lowest_quantity":
+        if http_method == "GET":
+            return get_lowest_quantity(event, context)
         else:
             return method_not_allowed()
             

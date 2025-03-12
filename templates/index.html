@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script src='//au.fw-cdn.com/20901518/332048.js'chat='true'>
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Flask + Tailwind</title>
@@ -9,70 +11,219 @@
     <!-- Link to Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body class="bg-gray-100 flex flex-col items-center justify-center h-screen p-8">
-    <div class="text-center bg-white p-8 rounded-lg shadow-lg w-full max-w-2xl">
-        <h1 class="text-3xl font-bold text-blue-600">Hello, Flask with Tailwind CSS!</h1>
-        <p class="text-gray-600 mt-4">You're successfully using TailwindCSS with Flask!</p>
-        
-        <!-- Button -->
-        <button id="fetchDataBtn" class="button mt-4">Fetch Products</button>
-        <button onclick="window.location.href='/database'" class="button mt-4">
-            Go to New Page
-        </button>
-
-        <!-- Table to Display Data -->
-        <table id="productTable" class="mt-4 w-full border-collapse hidden">
-            <thead>
-                <tr class="bg-gray-200">
-                    <th class="border px-4 py-2">ID</th>
-                    <th class="border px-4 py-2">Name</th>
-                    <th class="border px-4 py-2">Price</th>
-                </tr>
-            </thead>
-            <tbody id="productTableBody"></tbody>
-        </table>
+<body class="bg-gray-100">
+    <div class="grid grid-cols-3 gap-4">
+        <div class="col-span-3 bg-blue-500 h-[62px] text-neutral-100">
+            <div class="grid grid-cols-3 gap-4 mt-1">
+                <div class="flex mt-4 justify-end"><p>PlaceHolder Logo</p></div>
+                <div class="flex justify-center">
+                    <div class="p-2 w-full">
+                        <input type="text" placeholder="Search..." class="outline-none w-full px-2 rounded-lg text-neutral-900 h-[40px]">
+                    </div>
+                </div>
+                <div class="flex justify-center gap-[20px] mt-4">
+                    <p>Username</p>
+                    <p>Sign In</p>
+                    <a href="{{ url_for('checkout') }}" class="text-neutral-100 hover:underline">Cart</a>
+                    <p>Settings</p>
+                </div>  
+            </div>
+        </div>    
+        <div class="col-span-3 ...">
+    <!-- TOP NAVIGATION -->
+            <div class="grid grid-cols-3 gap-4">
+                <div class="flex justify-center mb-5"><p>PlaceHolder Logo</p></div>
+                <div class="flex justify-center gap-[80px]">
+                    <div class="relative inline-block text-left">
+                        <div class="relative inline-block text-left">
+                        <div>
+                            <button type="button" id="menu-button"
+                            class="text-gray-900 text-sm font-semibold hover:text-gray-600 focus:outline-none text-xl">
+                            Home
+                            </button>
+                        </div>
+                    
+                        <!-- Dropdown menu (Initially Hidden) -->
+                        <div id="dropdown-menu"
+                            class="absolute right-0 z-10 w-56 origin-top-right rounded-md bg-white ring-1 shadow-lg ring-black/5 hidden">
+                            <div class="py-1">
+                                <a href="#" class="block px-4 py-2 text-sm text-gray-700">Home Page</a>
+                                <a href="#" class="block px-4 py-2 text-sm text-gray-700">Featured</a>
+                                <a href="#" class="block px-4 py-2 text-sm text-gray-700">Contact Us</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="relative inline-block text-left">
+                    <div class="relative inline-block text-left">
+                        <div>
+                            <button type="button" id="shop-button"
+                            class="text-gray-900 text-sm font-semibold hover:text-gray-600 focus:outline-none text-xl">
+                            Shop
+                            </button>
+                        </div>
+                    
+                        <!-- Dropdown menu (Initially Hidden) -->
+                        <div id="dropdown-shop-menu"
+                            class="absolute right-0 z-10 w-56 origin-top-right rounded-md bg-white ring-1 shadow-lg ring-black/5 hidden">
+                            <div class="py-1">
+                                <a href="#" class="block px-4 py-2 text-sm text-gray-700">Browse</a>
+                                <a href="#" class="block px-4 py-2 text-sm text-gray-700">Featured</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="relative inline-block text-left">
+                    <div class="relative inline-block text-left">
+                        <div>
+                            <button type="button" id="blog-button"
+                            class="text-gray-900 text-sm font-semibold hover:text-gray-600 focus:outline-none text-xl">
+                            Blog
+                            </button>
+                        </div>
+                    
+                        <!-- Dropdown menu (Initially Hidden) -->
+                        <div id="dropdown-blog-menu"
+                            class="absolute right-0 z-10 w-56 origin-top-right rounded-md bg-white ring-1 shadow-lg ring-black/5 hidden">
+                            <div class="py-1">
+                                <a href="#" class="block px-4 py-2 text-sm text-gray-700">About Us</a>
+                                <a href="#" class="block px-4 py-2 text-sm text-gray-700">Weekly</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="relative inline-block text-left">
+                    <div class="relative inline-block text-left">
+                        <div>
+                            <button type="button" id="support-button"
+                            class="text-gray-900 text-sm font-semibold hover:text-gray-600 focus:outline-none text-xl">
+                            Support
+                            </button>
+                        </div>
+                    
+                        <!-- Dropdown menu (Initially Hidden) -->
+                        <div id="dropdown-support-menu"
+                            class="absolute right-0 z-10 w-56 origin-top-right rounded-md bg-white ring-1 shadow-lg ring-black/5 hidden">
+                            <div class="py-1">
+                                <a href="#" class="block px-4 py-2 text-sm text-gray-700">FaQ</a>
+                                <a href="#" class="block px-4 py-2 text-sm text-gray-700">Contact Us</a>
+                                <p class="font-bold block px-4 py-2 text-sm text-gray-700">support@gmail.com</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-center gap-[20px] ..."><div>
+        </div>
+      </div>
     </div>
+    <!-- BACKGROUND HERO -->
+    <div class="relative w-full bg-cover bg-center h-[600px] flex items-center px-10"
+    style="background-image: url('{{ url_for('static', filename='images/bg.png') }}');">
 
-    <script>
-        document.getElementById("fetchDataBtn").addEventListener("click", async function() {
-            try {
-                const response = await fetch("https://611vkfrpca.execute-api.us-east-2.amazonaws.com/dev/products");
-                const data = await response.json();
+        <!-- Text Content -->
+        <div class="w-1/2 flex flex-col items-end justify-center">
+            <p class="text-blue-600 text-xl font-semibold">Season Sale</p>
+            <h1 class="text-4xl font-extrabold text-gray-900">SIGMA FURNITURE</h1>
+            <p class="text-lg text-gray-700 mt-2">Min. 35-70% Off</p>
         
-                console.log("API Response:", data); // Debugging step
-        
-                // Ensure "items" key exists and is an array
-                if (!data.items || !Array.isArray(data.items)) {
-                    console.error("Error: API response does not contain a valid 'items' array", data);
-                    return;
-                }
-        
-                const products = data.items; // Extract products array
-                const table = document.getElementById("productTable");
-                const tableBody = document.getElementById("productTableBody");
-                tableBody.innerHTML = ""; // Clear previous data
-        
-                products.forEach(product => {
-                    let cleanedProduct = {};
-                    Object.keys(product).forEach(key => {
-                        let trimmedKey = key.trim(); // Remove spaces
-                        cleanedProduct[trimmedKey] = product[key];
-                    });
-                
-                    const row = document.createElement("tr");
-                    row.innerHTML = `
-                        <td class="border px-4 py-2">${cleanedProduct.productId || "N/A"}</td>
-                        <td class="border px-4 py-2">${cleanedProduct.product_name || cleanedProduct.name || "N/A"}</td>
-                        <td class="border px-4 py-2">$${cleanedProduct.price || "N/A"}</td>
-                    `;
-                    tableBody.appendChild(row);
-                });
-        
-                table.classList.remove("hidden"); // Show table
-            } catch (error) {
-                console.error("Error fetching products:", error);
+            <!-- Buttons -->
+            <div class="mt-4 flex space-x-4">
+                <a href="#" class="bg-blue-600 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-blue-700">
+                    SHOP NOW
+                </a>
+                <a href="#" class="border border-gray-600 text-gray-900 px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-100">
+                    READ MORE
+                </a>
+            </div>
+        </div>
+
+    </div>
+    <!-- FEATURED SECTION STARTS HERE -->
+     <div class="grid grid-cols-3 gap-4 mt-4 text-center">
+        <div class="col-span-3">
+            <h1 class="text-3xl font-bold text-gray-900">Featured Products</h1>
+        </div>
+        <div class="col-span-3">
+            <div class="flex justify-center gap-[20px] mt-4"><a href="#" class="text-gray-900 text-sm font-semibold hover:text-gray-600 focus:outline-none text-xl">New Arrivals</a><a href="#" class="text-gray-900 text-sm font-semibold hover:text-gray-600 focus:outline-none text-xl">Best Selling</a><a href="#" class="text-gray-900 text-sm font-semibold hover:text-gray-600 focus:outline-none text-xl">Top Rated</a></div>
+        </div>
+     </div>
+     <div class="grid grid-cols-3 gap-4 mt-10 p-5 text-center place-items-center" id="product-container">
+        <!-- Cards will be inserted here dynamically -->
+    </div>    
+</div>
+</div>
+<footer class="bg-gray-800 text-white py-6">
+    <div class="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center">
+        <!-- Left Side -->
+        <p class="text-sm">&copy; 2024 Your Company. All rights reserved.</p>
+
+        <!-- Right Side (Links) -->
+        <div class="flex space-x-4 mt-4 md:mt-0">
+            <a href="#" class="text-gray-400 hover:text-white transition">Privacy Policy</a>
+            <a href="#" class="text-gray-400 hover:text-white transition">Terms of Service</a>
+            <a href="#" class="text-gray-400 hover:text-white transition">Contact Us</a>
+        </div>
+    </div>
+</footer>
+<script>
+    async function fetchProducts() {
+        try {
+            const response = await fetch('https://611vkfrpca.execute-api.us-east-2.amazonaws.com/products');
+            const data = await response.json();
+
+            const productContainer = document.getElementById("product-container");
+
+            data.items.forEach(product => {
+                const card = document.createElement("div");
+                card.className = "w-[300px] rounded overflow-hidden shadow-lg bg-white p-4 cursor-pointer";
+                card.onclick = () => {
+                    window.location.href = `/product/${product.productId}`;
+                };
+
+                card.innerHTML = `
+                    <img class="w-full h-auto object-cover" src="{{ url_for('static', filename='images/prod.png') }}" alt="${product.product_name}">
+                    <div class="px-6 py-4">
+                        <div class="font-bold text-xl mb-2">${product.product_name}</div>
+                        <p class="text-gray-700 text-base">Price: $${product.price}</p>
+                        <p class="text-gray-700 text-base">Quantity: ${product.quantity}</p>
+                    </div>
+                `;
+
+                productContainer.appendChild(card);
+            });
+
+        } catch (error) {
+            console.error("Error fetching data:", error);
+        }
+    }
+
+    fetchProducts();
+</script>
+</body>
+<script>
+    function toggleDropdown(buttonId, menuId) {
+        document.getElementById(menuId).classList.toggle("hidden");
+    }
+
+    document.addEventListener("click", function (event) {
+        const dropdowns = [
+            { button: "menu-button", menu: "dropdown-menu" },
+            { button: "shop-button", menu: "dropdown-shop-menu" },
+            { button: "blog-button", menu: "dropdown-blog-menu"},
+            { button: "support-button", menu: "dropdown-support-menu"}
+        ];
+
+        dropdowns.forEach(({ button, menu }) => {
+            const btn = document.getElementById(button);
+            const dropdown = document.getElementById(menu);
+
+            if (btn.contains(event.target)) {
+                dropdown.classList.toggle("hidden");
+            } else if (!dropdown.contains(event.target)) {
+                dropdown.classList.add("hidden");
             }
         });
-    </script>
-</body>
+    });
+</script>
 </html>

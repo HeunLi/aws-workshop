@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script src='//au.fw-cdn.com/20901518/332048.js'chat='true'>
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Database Page</title>
@@ -143,7 +145,7 @@
                         console.log("Updating product:", { productId, newQuantity });
                 
                         try {
-                            const response = await fetch(`https://611vkfrpca.execute-api.us-east-2.amazonaws.com/products/${productId}`, {
+                            const response = await fetch(`https://611vkfrpca.execute-api.us-east-2.amazonaws.com/dev/products/${productId}`, {
                                 method: "PUT",  // ✅ Changed to PUT as required
                                 headers: {
                                     "Content-Type": "application/json",
