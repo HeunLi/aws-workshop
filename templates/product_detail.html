@@ -52,7 +52,7 @@
               </p>
             </div>
             <div class="grid grid-row-2 flex justify-center mt-[55px]">
-                <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full w-[175px] mb-3">
+                <button class="add-to-cart-btn bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full w-[175px] mb-3">
                     Add to Cart
                 </button>
                 <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full w-[175px]">
@@ -114,6 +114,48 @@
     }
 
     fetchProducts();
+</script>
+<script>
+    let cart = JSON.parse(localStorage.getItem('cart')) || [];
+
+    function addToCart(productId, stock) {
+        let quantity = prompt("Enter the quantity you want to add:");
+
+        if (!quantity || isNaN(quantity) || quantity <= 0) {
+            alert("Please enter a valid quantity.");
+            return;
+        }
+
+        quantity = parseInt(quantity);
+
+        if (quantity > stock) {
+            alert(`Only ${stock} items are in stock.`);
+            return;
+        }
+
+        let existingItem = cart.find(item => item.productId === productId);
+        const productName = "{{ product.product_name }}";
+        const price = "{{ product.price }}";
+        if (existingItem) {
+            existingItem.quantity += quantity;
+        } else {
+            cart.push({ productId, quantity, productName, price });
+        }
+
+        localStorage.setItem('cart', JSON.stringify(cart));
+        alert("Item added to cart!");
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const addToCartButton = document.querySelector(".add-to-cart-btn");
+        if (addToCartButton) {
+            addToCartButton.addEventListener("click", function() {
+                const productId = "{{ product.productId }}"; // Adjust this based on your actual product ID
+                const stock = parseInt("{{ product.quantity }}");
+                addToCart(productId, stock);
+            });
+        }
+    });
 </script>
 </body>
 </html>

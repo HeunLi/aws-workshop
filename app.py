@@ -1,8 +1,9 @@
-from flask import Flask, render_template, abort, request
+from flask import Flask, render_template, abort, request, jsonify
 import requests
 
 app = Flask(__name__)
 
+# Base API URL (adjust if needed)
 API_URL = "https://611vkfrpca.execute-api.us-east-2.amazonaws.com/products"
 
 def get_product(product_id):
@@ -25,9 +26,35 @@ def home():
 def new_page():
     return render_template('database.html')
 
-@app.route('/checkout')
+@app.route('/checkout', methods=['GET', 'POST'])
 def checkout():
-    return render_template('checkout.html')
+    if request.method == 'GET':
+        return render_template('checkout.html')
+
+    # POST request: process checkout
+    cart = request.json.get("cart", [])
+    if not cart:
+        return jsonify({"error": "Cart is empty"}), 400
+
+    # Process each cart item
+    for item in cart:
+        product_id = item.get("productId")
+        quantity = item.get("quantity")
+        if not product_id or not quantity:
+            return jsonify({"error": "Invalid cart item"}), 400
+
+        try:
+            response = requests.post(
+                f"{API_URL}/{product_id}/inventory",
+                params={"quantity": -quantity, "remarks": "Sold Product"}
+            )
+            if response.status_code != 200:
+                return jsonify({"error": f"Failed to purchase product with id {product_id}"}), 500
+        except requests.exceptions.RequestException as e:
+            print(f"Checkout error for product {product_id}: {e}")
+            return jsonify({"error": f"Error processing checkout for product {product_id}"}), 500
+
+    return jsonify({"message": "Purchase successful!"}), 200
 
 @app.route('/product/<product_id>')
 def product_detail(product_id):

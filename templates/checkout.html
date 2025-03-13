@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <script src='//au.fw-cdn.com/20901518/332048.js'chat='true'>
-    </script>
+    <script src='//au.fw-cdn.com/20901518/332048.js' chat='true'></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
@@ -10,9 +9,160 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Link to Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <title>Document</title>
+    <title>Checkout</title>
 </head>
 <body>
-    <h1>This is the checkout page</h1>
+    <!-- Header Section -->
+    <div class="grid grid-cols-3 gap-4">
+        <div class="col-span-3 bg-blue-500 h-[62px] text-neutral-100">
+            <div class="grid grid-cols-3 gap-4 mt-1">
+                <div class="flex mt-4 justify-end"><p>PlaceHolder Logo</p></div>
+                <div class="flex justify-center">
+                    <div class="p-2 w-full">
+                        <input type="text" placeholder="Search..." class="outline-none w-full px-2 rounded-lg text-neutral-900 h-[40px]">
+                    </div>
+                </div>
+                <div class="flex justify-center gap-[20px] mt-4">
+                    <p>Username</p>
+                    <p>Sign In</p>
+                    <a href="{{ url_for('checkout') }}" class="text-neutral-100 hover:underline">Cart</a>
+                    <p>Settings</p>
+                </div>  
+            </div>
+        </div>
+    </div>
+
+    <!-- Products Ordered Card -->
+    <div class="grid grid-cols-3 gap-4">
+        <div class="flex justify-center col-span-3">
+            <div class="w-full rounded overflow-hidden shadow-lg m-5 border border-neutral-300">
+                <div class="px-6 py-4">
+                    <!-- Card Header -->
+                    <div class="grid grid-cols-6 gap-4">
+                        <div class="col-span-3">
+                            <div class="font-bold text-xl mb-2">Products Ordered</div>
+                        </div>
+                        <div class="col-span-1">
+                            <p>Unit Price</p>
+                        </div>
+                        <div class="col-span-1">
+                            <p>Quantity</p>
+                        </div>
+                        <div class="col-span-1">
+                            <p>Item Subtotal</p>
+                        </div>
+                    </div>
+                    <!-- Container to hold each product row -->
+                    <div id="products-ordered" class="mt-4">
+                        <!-- Cart items will be dynamically added here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation and Action Buttons -->
+    <div class="flex gap-4 justify-center">
+        <!-- Clear Cart Button -->
+        <button onclick="clearCart()" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+            Clear Cart
+        </button>
+        <!-- Return to Home Button -->
+        <a href="/" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+            Return to Home
+        </a>
+        <!-- Checkout Button -->
+        <button onclick="checkout()" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+            Checkout
+        </button>
+    </div>
+
+    <script>
+        // Function to load and display cart items in the "Products Ordered" card.
+        function loadCart() {
+            let cart = JSON.parse(localStorage.getItem('cart')) || [];
+            let container = document.getElementById("products-ordered");
+            container.innerHTML = "";
+
+            if (cart.length === 0) {
+                container.innerHTML = "<p>Your cart is empty.</p>";
+                return;
+            }
+
+            cart.forEach(item => {
+                // Create a grid row for each product.
+                let row = document.createElement("div");
+                row.className = "grid grid-cols-6 gap-4 border-b py-2";
+
+                // Product Name (first 3 columns)
+                let nameDiv = document.createElement("div");
+                nameDiv.className = "col-span-3";
+                nameDiv.textContent = item.productName || "Unknown Product";
+                row.appendChild(nameDiv);
+
+                // Unit Price Placeholder (column 4)
+                let priceDiv = document.createElement("div");
+                priceDiv.className = "col-span-1";
+                priceDiv.textContent = "$" + item.price; // Placeholder for unit price
+                row.appendChild(priceDiv);
+
+                // Quantity (column 5)
+                let quantityDiv = document.createElement("div");
+                quantityDiv.className = "col-span-1";
+                quantityDiv.textContent = item.quantity;
+                row.appendChild(quantityDiv);
+
+                // Subtotal Placeholder (column 6)
+                let subtotalDiv = document.createElement("div");
+                subtotalDiv.className = "col-span-1";
+                subtotalDiv.textContent = "$" + item.price * item.quantity; // Placeholder for item subtotal
+                row.appendChild(subtotalDiv);
+
+                container.appendChild(row);
+            });
+        }
+
+        // Function to clear the cart from localStorage and refresh the list.
+        function clearCart() {
+            localStorage.removeItem('cart');
+            loadCart();
+        }
+
+        async function checkout() {
+            let cart = JSON.parse(localStorage.getItem('cart')) || [];
+            console.log("Cart contents:", cart);
+            if (cart.length === 0) {
+                alert("Your cart is empty.");
+                return;
+            }
+            
+            try {
+                let response = await fetch('/checkout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ cart: cart })
+                });
+                console.log("Response status:", response.status);
+                let result = await response.json();
+                console.log("Response data:", result);
+                if (response.ok) {
+                    alert(result.message);
+                    localStorage.removeItem('cart');
+                    loadCart();
+                } else {
+                    alert(result.error || 'Checkout failed.');
+                }
+            } catch (error) {
+                console.error("Checkout error:", error);
+                alert("An error occurred during checkout.");
+            }
+        }
+
+
+        // Load the cart items when the page finishes loading.
+        document.addEventListener("DOMContentLoaded", loadCart);
+    </script>
 </body>
 </html>
